@@ -109,7 +109,7 @@ impl Chip8 {
 		// decode
 		let c:   u16   =  (instruction & 0xf000) >> 12; // high-level instruction category
 		let vx:  usize = ((instruction & 0x0f00) >> 8) as usize; // VX register
-		let vy:  usize = ((instruction & 0x00f0) >> 8) as usize; // VY register
+		let vy:  usize = ((instruction & 0x00f0) >> 4) as usize; // VY register
 		let n:   u8    =  (instruction & 0x000f) as u8; // 4 bit number
 		let nn:  u8    =  (instruction & 0x00ff) as u8; // 8 bit number
 		let nnn: u16   =   instruction & 0x0fff; // memory address
@@ -183,28 +183,31 @@ impl Chip8 {
 			},
 			0xd => {
 				// draw screen
+				println!("Draw (0x{:04x}) - x: {}, y: {}, height: {}", instruction, self.registers[vx], self.registers[vy], n);
+
 				let vx: usize = self.registers[vx] as usize;
 				let vy: usize = self.registers[vy] as usize;
 				let mut x: usize = vx % 64;
 				let mut y: usize = vy % 32;
 				self.registers[0xf] = 0;
 
-				for i in 0..n {
-					let byte: u8 = self.memory[(self.i as usize) + (i as usize)];
-					for j in 0..8 {
-						if (byte >> (7 - j)) & 1 == 1 {
+				for row in 0..n {
+					let byte: u8 = self.memory[(self.i as usize) + (row as usize)];
+					for col in 0..8 {
+						if (byte >> (7 - col)) & 1 == 1 {
 							if self.display[y * 64 + x] == 1 {
 								self.registers[0xf] = 1;
 							}
 							self.display[y * 64 + x] ^= 1;
 						}
-						if x >= 63 {
+						x += 1;
+						if x >= 64 {
 							break;
 						}
-						x += 1;
 					}
+					x = vx % 64;
 					y += 1;
-					if y >= 31 {
+					if y >= 32 {
 						break;
 					}
 				}
