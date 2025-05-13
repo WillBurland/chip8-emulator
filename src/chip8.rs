@@ -1,4 +1,4 @@
-use crate::utils;
+use crate::{DISPLAY_HEIGHT, DISPLAY_WIDTH};
 
 pub struct Chip8 {
 	memory: [u8; 4096], // 4KB memory
@@ -9,7 +9,7 @@ pub struct Chip8 {
 	sound_timer: u8,
 	stack: [u16; 16], // 16 level stack
 	sp: u8, // Stack pointer
-	display: [u8; 64 * 32], // 64 x 32 pixels, monochrome, 1 byte/pixel
+	display: [u8; DISPLAY_WIDTH * DISPLAY_HEIGHT], // 64 x 32 pixels, monochrome, 1 byte/pixel
 	keypad: [bool; 16],
 }
 
@@ -24,7 +24,7 @@ impl Chip8 {
 			sound_timer: 0,
 			stack: [0; 16],
 			sp: 0,
-			display: [0; 64 * 32],
+			display: [0; DISPLAY_WIDTH * DISPLAY_HEIGHT],
 			keypad: [false; 16],
 		}
 	}
@@ -38,7 +38,7 @@ impl Chip8 {
 		self.sound_timer = 0;
 		self.stack = [0; 16];
 		self.sp = 0;
-		self.display = [0; 64 * 32];
+		self.display = [0; DISPLAY_WIDTH * DISPLAY_HEIGHT];
 		self.keypad = [false; 16];
 	}
 
@@ -94,7 +94,11 @@ impl Chip8 {
 		if self.sound_timer > 0 {
 			self.sound_timer -= 1;
 		}
-	}	
+	}
+
+	pub fn get_display(&self) -> &[u8; DISPLAY_WIDTH * DISPLAY_HEIGHT] {
+		&self.display
+	}
 
 	pub fn fetch_decode_execute(&mut self) {
 		// fetch
@@ -121,10 +125,7 @@ impl Chip8 {
 			0x0 => {
 				if instruction == 0x00e0 {
 					// clear screen
-					println!("Clear screen");
-					self.display = [0; 64 * 32];
-				// } else if instruction == 0x0000 {
-				// 	panic!("0x0000 instruction read, exiting...");
+					self.display = [0; DISPLAY_WIDTH * DISPLAY_HEIGHT];
 				} else {
 					Self::unhandled_instruction(&instruction);
 				}
@@ -132,7 +133,6 @@ impl Chip8 {
 			0x1 => {
 				// jump
 				self.pc = nnn;
-				println!("Jump to 0x{:04x}", nnn);
 			},
 			0x2 => {
 				// todo
@@ -153,12 +153,10 @@ impl Chip8 {
 			0x6 => {
 				// set register VX
 				self.registers[vx] = nn;
-				println!("Set V{:x} to 0x{:02x}", vx, nn);
 			},
 			0x7 => {
 				// add value to register VX
 				self.registers[vx] += nn;
-				println!("Add to V{:x} amount 0x{:02x}", vx, nn);
 			},
 			0x8 => {
 				// todo
@@ -171,7 +169,6 @@ impl Chip8 {
 			0xa => {
 				// set index register i
 				self.i = nnn;
-				println!("Set i reg to 0x{:04x}", nnn);
 			},
 			0xb => {
 				// todo
@@ -183,36 +180,32 @@ impl Chip8 {
 			},
 			0xd => {
 				// draw screen
-				println!("Draw (0x{:04x}) - x: {}, y: {}, height: {}", instruction, self.registers[vx], self.registers[vy], n);
-
 				let vx: usize = self.registers[vx] as usize;
 				let vy: usize = self.registers[vy] as usize;
-				let mut x: usize = vx % 64;
-				let mut y: usize = vy % 32;
+				let mut x: usize = vx % DISPLAY_WIDTH;
+				let mut y: usize = vy % DISPLAY_HEIGHT;
 				self.registers[0xf] = 0;
 
 				for row in 0..n {
 					let byte: u8 = self.memory[(self.i as usize) + (row as usize)];
 					for col in 0..8 {
 						if (byte >> (7 - col)) & 1 == 1 {
-							if self.display[y * 64 + x] == 1 {
+							if self.display[y * DISPLAY_WIDTH + x] == 1 {
 								self.registers[0xf] = 1;
 							}
-							self.display[y * 64 + x] ^= 1;
+							self.display[y * DISPLAY_WIDTH + x] ^= 1;
 						}
 						x += 1;
-						if x >= 64 {
+						if x >= DISPLAY_WIDTH {
 							break;
 						}
 					}
-					x = vx % 64;
+					x = vx % DISPLAY_WIDTH;
 					y += 1;
-					if y >= 32 {
+					if y >= DISPLAY_HEIGHT {
 						break;
 					}
 				}
-
-				utils::draw_display(&self.display);
 			},
 			0xe => {
 				// todo
@@ -222,7 +215,7 @@ impl Chip8 {
 				// todo
 				Self::unhandled_instruction(&instruction);
 			},
-			default => {
+			_ => {
 				Self::unhandled_instruction(&instruction);
 			}
 		}

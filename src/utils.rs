@@ -23,17 +23,3 @@ pub fn dump_memory_dec(memory: &[u8], start: usize) {
 	}
 	print!("\n");
 }
-
-pub fn draw_display(display_data: &[u8; 64 * 32]) {
-	for y in 0..32 {
-		let mut line:String = String::new();
-		for x in 0..64 {
-			if display_data[y * 64 + x] == 0 {
-				line += ".";
-			} else {
-				line += "#";
-			}
-		}
-		println!("|{}|", line);
-	}
-}
