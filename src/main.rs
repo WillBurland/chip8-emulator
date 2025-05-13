@@ -1,9 +1,9 @@
 use minifb::{Key, Scale, Window, WindowOptions};
+use std::fs::File;
+use std::io::{self, Read};
 use std::time::{Duration, Instant};
 
 mod chip8;
-mod roms;
-mod utils;
 
 const DISPLAY_FPS: u64 = 60;
 const DISPLAY_DELAY: Duration = Duration::from_micros(1_000_000 / DISPLAY_FPS);
@@ -32,12 +32,14 @@ const FONT_DATA: [u8; 5 * 16] = [
 	0xf0, 0x80, 0xf0, 0x80, 0x80  // F
 ];
 
+const PROGRAM_NAME: &str = "test-opcode";
+
 fn main() {
 	let mut chip8: chip8::Chip8 = chip8::Chip8::new();
 	let mut frame_buffer: [u32; DISPLAY_WIDTH * DISPLAY_HEIGHT] = [0; DISPLAY_WIDTH * DISPLAY_HEIGHT];
 
 	let mut window: Window = Window::new(
-		"CHIP-8 Emulator",
+		"CHIP-8 Emulator - FPS: 0",
 		DISPLAY_WIDTH,
 		DISPLAY_HEIGHT,
 		WindowOptions {
@@ -51,7 +53,19 @@ fn main() {
 
 	chip8.reset();
 	chip8.write_memory_block(0x050, &FONT_DATA);
-	chip8.write_memory_block(0x200, &roms::IBM_LOGO);
+
+	let file_path = std::env::current_dir()
+		.map(|current_dir| current_dir.join(format!("roms/{}.ch8", PROGRAM_NAME)))
+		.unwrap_or_else(|_| panic!("Error getting current directory"));
+
+	if file_path.exists() {
+		match read_file(file_path.to_str().unwrap()) {
+			Ok(bytes) => chip8.write_memory_block(0x200, &bytes),
+			Err(_) => panic!("Unable to read ROM: {}", file_path.display()),
+		}
+	} else {
+		panic!("Unable to find ROM: {}", file_path.display());
+	}
 
 	let mut frame_count: u16 = 0;
 	let mut last_fps_time: Instant = Instant::now();
@@ -88,4 +102,10 @@ fn main() {
 
 		last_frame_time += DISPLAY_DELAY;
 	}
+}
+
+fn read_file(file_path: &str) -> io::Result<Vec<u8>> {
+	let mut buffer: Vec<u8> = Vec::new();
+	File::open(file_path)?.read_to_end(&mut buffer)?;
+	Ok(buffer)
 }
