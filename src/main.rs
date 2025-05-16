@@ -52,7 +52,7 @@ fn main() {
 	});
 
 	chip8.reset();
-	chip8.write_memory_block(0x050, &FONT_DATA);
+	chip8.write_memory(0x050, &FONT_DATA);
 
 	let file_path = std::env::current_dir()
 		.map(|current_dir| current_dir.join(format!("roms/{}.ch8", PROGRAM_NAME)))
@@ -60,7 +60,7 @@ fn main() {
 
 	if file_path.exists() {
 		match read_file(file_path.to_str().unwrap()) {
-			Ok(bytes) => chip8.write_memory_block(0x200, &bytes),
+			Ok(bytes) => chip8.write_memory(0x200, &bytes),
 			Err(_) => panic!("Unable to read ROM: {}", file_path.display()),
 		}
 	} else {

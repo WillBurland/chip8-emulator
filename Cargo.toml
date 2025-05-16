@@ -5,6 +5,7 @@ edition = "2021"
 
 [dependencies]
 minifb = "0.28.0"
+rand = "0.9.1"
 
 [profile.dev]
 overflow-checks = false

@@ -1,4 +1,8 @@
+use rand::Rng;
+
 use crate::{DISPLAY_HEIGHT, DISPLAY_WIDTH};
+
+static SUPER_CHIP: bool = false;
 
 pub struct Chip8 {
 	memory: [u8; 4096], // 4KB memory
@@ -42,48 +46,12 @@ impl Chip8 {
 		self.keypad = [false; 16];
 	}
 
-	pub fn read_memory_full(&self) -> &[u8; 4096] {
-		&self.memory
-	}
-
-	pub fn write_memory_full(&mut self, memory: &[u8; 4096]) {
-		self.memory.copy_from_slice(memory);
-	}
-
-	pub fn read_memory_block(&self, start: usize, size: usize) -> &[u8] {
-		if start >= 0x1000 || start + size > 0x1000 {
-			eprintln!("Invalid read memory block start or size - start: {} - size: {}", start, size);
-			return &[];
-		}
-
+	pub fn read_memory(&self, start: usize, size: usize) -> &[u8] {
 		&self.memory[start..start + size]
 	}
 
-	pub fn write_memory_block(&mut self, addr: usize, data: &[u8]) {
-		if addr >= 0x1000 || addr + data.len() > 0x1000 {
-			eprintln!("Invalid write memory block start or overflowed - start: {} - size: {}", addr, data.len());
-			return;
-		}
-
+	pub fn write_memory(&mut self, addr: usize, data: &[u8]) {
 		self.memory[addr..addr + data.len()].copy_from_slice(data);
-	}
-
-	pub fn read_memory_single(&self, addr: usize) -> &u8 {
-		if addr >= 0x1000 {
-			eprintln!("Invalid read address - address: {}", addr);
-			return &0;
-		}
-
-		&self.memory[addr]
-	}
-
-	pub fn write_memory_single(&mut self, addr: usize, value: u8) {
-		if addr >= 0x1000 {
-			eprintln!("Invalid write address - address: {}", addr);
-			return;
-		}
-
-		self.memory[addr] = value;
 	}
 
 	pub fn decrement_timers(&mut self) {
@@ -103,7 +71,7 @@ impl Chip8 {
 	pub fn fetch_decode_execute(&mut self) {
 		// fetch
 		let block: [u8; 2] = {
-			let temp: &[u8] = self.read_memory_block(self.pc as usize, 2);
+			let temp: &[u8] = self.read_memory(self.pc as usize, 2);
 			[temp[0], temp[1]]
 		};
 		let mut instruction: u16 = (block[0] as u16) << 8;
@@ -123,67 +91,78 @@ impl Chip8 {
 		// execute
 		match c {
 			0x0 => {
-				if instruction == 0x00e0 {
-					// clear screen
-					self.display = [0; DISPLAY_WIDTH * DISPLAY_HEIGHT];
-				} else {
-					Self::unhandled_instruction(&instruction);
+				match instruction {
+					0x00e0 => self.display = [0; DISPLAY_WIDTH * DISPLAY_HEIGHT], // clear screen
+					0x00ee => {
+						self.sp -= 1;
+						self.pc = self.stack[self.sp as usize];
+					} // return from subroutine
+					_ => Self::unhandled_instruction(&instruction),
 				}
 			},
-			0x1 => {
-				// jump
+			0x1 => self.pc = nnn, // jump
+			0x2 => { // subroutine jump
+				self.stack[self.sp as usize] = self.pc;
+				self.sp += 1;
 				self.pc = nnn;
-			},
-			0x2 => {
-				// todo
-				Self::unhandled_instruction(&instruction);
-			},
-			0x3 => {
-				// todo
-				Self::unhandled_instruction(&instruction);
-			},
-			0x4 => {
-				// todo
-				Self::unhandled_instruction(&instruction);
-			},
-			0x5 => {
-				// todo
-				Self::unhandled_instruction(&instruction);
-			},
-			0x6 => {
-				// set register VX
-				self.registers[vx] = nn;
-			},
-			0x7 => {
-				// add value to register VX
-				self.registers[vx] += nn;
-			},
+			}
+			0x3 => if self.registers[vx] == nn { self.pc += 2 }, // skip conditionally,
+			0x4 => if self.registers[vx] != nn { self.pc += 2 }, // skip conditionally,
+			0x5 => if self.registers[vx] == self.registers[vy] { self.pc += 2 }, // skip conditionally,
+			0x6 => self.registers[vx] = nn, // set register VX
+			0x7 => self.registers[vx] += nn, // add value to register VX
 			0x8 => {
-				// todo
-				Self::unhandled_instruction(&instruction);
+				match n {
+					0x0 => self.registers[vx]  = self.registers[vy], // set VX to  VY
+					0x1 => self.registers[vx] |= self.registers[vy], //  OR VX and VY
+					0x2 => self.registers[vx] &= self.registers[vy], // AND VX and VY
+					0x3 => self.registers[vx] ^= self.registers[vy], // XOR VX and VY
+					0x4 => self.registers[vx] += self.registers[vy], // add VX and VY
+					0x5 => { // set VX to VX - VY
+						self.registers[0xf] = (self.registers[vx] > self.registers[vy]) as u8;
+						self.registers[vx] -= self.registers[vy];
+					},
+					0x6 => { // shift
+						if SUPER_CHIP {
+							self.registers[0xf] = self.registers[vx] & 0b00000001;
+							self.registers[vx] = self.registers[vx] >> 1;
+						} else {
+							self.registers[0xf] = self.registers[vy] & 0b00000001;
+							self.registers[vx] = self.registers[vy] >> 1;
+						}
+					},
+					0x7 => { // set VX to VY - VX
+						self.registers[0xf] = (self.registers[vy] > self.registers[vx]) as u8;
+						self.registers[vx]  = self.registers[vy] - self.registers[vx];
+					},
+					0xe => { // shift
+						if SUPER_CHIP {
+							self.registers[0xf] = self.registers[vx] & 0b10000000;
+							self.registers[vx] = self.registers[vx] << 1;
+						} else {
+							self.registers[0xf] = self.registers[vy] & 0b10000000;
+							self.registers[vx] = self.registers[vy] << 1;
+						}
+					},
+					_ => Self::unhandled_instruction(&instruction),
+				}
 			},
-			0x9 => {
-				// todo
-				Self::unhandled_instruction(&instruction);
+			0x9 => if self.registers[vx] != self.registers[vy] { self.pc += 2 }, // skip conditionally,
+			0xa => self.i = nnn, // set index register i
+			0xb => { // jump with offset
+				if SUPER_CHIP {
+					self.pc = nnn + self.registers[vx] as u16;
+				} else {
+					self.pc = nnn + self.registers[0x0] as u16;
+				}
 			},
-			0xa => {
-				// set index register i
-				self.i = nnn;
-			},
-			0xb => {
-				// todo
-				Self::unhandled_instruction(&instruction);
-			},
-			0xc => {
-				// todo
-				Self::unhandled_instruction(&instruction);
-			},
+			0xc => self.registers[vx] = nn & rand::rng().random::<u8>(), // random number
 			0xd => {
 				// draw screen
-				let vx: usize = self.registers[vx] as usize;
-				let vy: usize = self.registers[vy] as usize;
-				let mut x: usize = vx % DISPLAY_WIDTH;
-				let mut y: usize = vy % DISPLAY_HEIGHT;
+				let vx_val: usize = self.registers[vx] as usize;
+				let vy_val: usize = self.registers[vy] as usize;
+				let mut x: usize = vx_val % DISPLAY_WIDTH;
+				let mut y: usize = vy_val % DISPLAY_HEIGHT;
 				self.registers[0xf] = 0;
 
 				for row in 0..n {
@@ -200,7 +179,7 @@ impl Chip8 {
 							break;
 						}
 					}
-					x = vx % DISPLAY_WIDTH;
+					x = vx_val % DISPLAY_WIDTH;
 					y += 1;
 					if y >= DISPLAY_HEIGHT {
 						break;
@@ -208,16 +187,59 @@ impl Chip8 {
 				}
 			},
 			0xe => {
-				// todo
-				Self::unhandled_instruction(&instruction);
+				match nn {
+					0x9e => {}, // TODO: skip (pc+=2) if reg[vx] == input key
+					0xa1 => {}, // TODO: skip (pc+=2) if reg[vx] != input key
+					_ => Self::unhandled_instruction(&instruction),
+				}
 			},
 			0xf => {
-				// todo
-				Self::unhandled_instruction(&instruction);
+				match nn {
+					0x07 => self.registers[vx] = self.delay_timer, // set VX to delay timer
+					0x0a => {}, // TODO: get key
+					0x15 => self.delay_timer = self.registers[vx], // set delay timer to VX
+					0x18 => self.sound_timer = self.registers[vx], // set sound timer to VX
+					0x1e => { // add VX to I reg
+						if self.i <= 0xfff && (self.i + self.registers[vx] as u16) >= 0x1000 {
+							self.registers[0xf] = 1;
+						}
+						self.i += self.registers[vx] as u16;
+					},
+					0x29 => self.i = 0x050 + self.registers[vx] as u16, // point to font
+					0x33 => { // binary coded decimal conversion
+						self.memory[self.i as usize + 0] = self.registers[vx] / 100;
+						self.memory[self.i as usize + 1] = (self.registers[vx] % 100) / 10;
+						self.memory[self.i as usize + 2] = self.registers[vx] % 10;
+					},
+					0x55 => { // store memory
+						if SUPER_CHIP {
+							for r in 0..=vx {
+								self.memory[self.i as usize + r] = self.registers[r];
+							}
+						} else {
+							for r in 0..=vx {
+								self.memory[self.i as usize] = self.registers[r];
+								self.i += 1;
+							}
+						}
+						
+					},
+					0x65 => { // load memory
+						if SUPER_CHIP {
+							for r in 0..=vx {
+								self.registers[r] = self.memory[self.i as usize + r];
+							}
+						} else {
+							for r in 0..=vx {
+								self.registers[r] = self.memory[self.i as usize];
+								self.i += 1;
+							}
+						}
+					},
+					_ => Self::unhandled_instruction(&instruction),
+				}
 			},
-			_ => {
-				Self::unhandled_instruction(&instruction);
-			}
+			_ => Self::unhandled_instruction(&instruction),
 		}
 	}
 
