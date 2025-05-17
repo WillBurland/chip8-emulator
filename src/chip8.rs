@@ -14,7 +14,8 @@ pub struct Chip8 {
 	stack: [u16; 16], // 16 level stack
 	sp: u8, // Stack pointer
 	display: [u8; DISPLAY_WIDTH * DISPLAY_HEIGHT], // 64 x 32 pixels, monochrome, 1 byte/pixel
-	keypad: [bool; 16],
+	keypad_held: [bool; 16],
+	keypad_released: [bool; 16],
 }
 
 impl Chip8 {
@@ -29,21 +30,9 @@ impl Chip8 {
 			stack: [0; 16],
 			sp: 0,
 			display: [0; DISPLAY_WIDTH * DISPLAY_HEIGHT],
-			keypad: [false; 16],
+			keypad_held: [false; 16],
+			keypad_released: [false; 16],
 		}
-	}
-
-	pub fn reset(&mut self) {
-		self.memory = [0; 4096];
-		self.registers = [0; 16];
-		self.pc = 0x200;
-		self.i = 0;
-		self.delay_timer = 0;
-		self.sound_timer = 0;
-		self.stack = [0; 16];
-		self.sp = 0;
-		self.display = [0; DISPLAY_WIDTH * DISPLAY_HEIGHT];
-		self.keypad = [false; 16];
 	}
 
 	pub fn read_memory(&self, start: usize, size: usize) -> &[u8] {
@@ -68,8 +57,12 @@ impl Chip8 {
 		&self.display
 	}
 
-	pub fn set_keypad(&mut self, key: usize, value: bool) {
-		self.keypad[key] = value;
+	pub fn set_keypad_held(&mut self, key: usize, value: bool) {
+		self.keypad_held[key] = value;
+	}
+
+	pub fn set_keypad_released(&mut self, key: usize, value: bool) {
+		self.keypad_released[key] = value;
 	}
 
 	pub fn fetch_decode_execute(&mut self) {
@@ -191,12 +184,12 @@ impl Chip8 {
 			0xe => {
 				match nn {
 					0x9e => { // skip if key[reg[vx]] held
-						if self.keypad[self.registers[vx] as usize] {
+						if self.keypad_held[self.registers[vx] as usize] {
 							self.pc += 2;
 						}
 					},
 					0xa1 => { // skip if key[reg[vx]] not held
-						if !self.keypad[self.registers[vx] as usize] {
+						if !self.keypad_held[self.registers[vx] as usize] {
 							self.pc += 2;
 						}
 					},
@@ -206,9 +199,9 @@ impl Chip8 {
 			0xf => {
 				match nn {
 					0x07 => self.registers[vx] = self.delay_timer, // set VX to delay timer
-					0x0a => { // block until key pressed
+					0x0a => { // block until key pressed and released
 						for i in 0..16 {
-							if self.keypad[i] {
+							if self.keypad_released[i] {
 								self.registers[vx] = i as u8;
 								return;
 							}
@@ -223,7 +216,7 @@ impl Chip8 {
 						}
 						self.i += self.registers[vx] as u16;
 					},
-					0x29 => self.i = 0x050 + self.registers[vx] as u16, // point to font
+					0x29 => self.i = (self.registers[vx] as u16) * 5, // point to font
 					0x33 => { // binary coded decimal conversion
 						self.memory[self.i as usize + 0] = self.registers[vx] / 100;
 						self.memory[self.i as usize + 1] = (self.registers[vx] % 100) / 10;

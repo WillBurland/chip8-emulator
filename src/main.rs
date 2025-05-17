@@ -7,9 +7,6 @@ mod chip8;
 
 const DISPLAY_FPS: u64 = 60;
 const DISPLAY_DELAY: Duration = Duration::from_micros(1_000_000 / DISPLAY_FPS);
-const TIMER_FPS: u64 = 60;
-const TIMER_DELAY: Duration = Duration::from_micros(1_000_000 / TIMER_FPS);
-
 const DISPLAY_WIDTH: usize = 64;
 const DISPLAY_HEIGHT: usize = 32;
 
@@ -70,8 +67,7 @@ fn main() {
 		panic!("Unable to open window: {}", e);
 	});
 
-	chip8.reset();
-	chip8.write_memory(0x050, &FONT_DATA);
+	chip8.write_memory(0, &FONT_DATA);
 
 	let file_path = std::env::current_dir()
 		.map(|current_dir| current_dir.join(format!("roms/{}.ch8", PROGRAM_NAME)))
@@ -100,7 +96,8 @@ fn main() {
 
 		// emulate
 		for (key, value) in KEY_MAP {
-			chip8.set_keypad(*value as usize, window.is_key_released(*key));
+			chip8.set_keypad_held(*value as usize, window.is_key_down(*key));
+			chip8.set_keypad_released(*value as usize, window.is_key_released(*key));
 		}
 		chip8.decrement_timers();
 		chip8.fetch_decode_execute();
