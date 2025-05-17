@@ -117,32 +117,32 @@ impl Chip8 {
 					0x1 => self.registers[vx] |= self.registers[vy], //  OR VX and VY
 					0x2 => self.registers[vx] &= self.registers[vy], // AND VX and VY
 					0x3 => self.registers[vx] ^= self.registers[vy], // XOR VX and VY
-					0x4 => self.registers[vx] += self.registers[vy], // add VX and VY
+					0x4 => { // add VX and VY
+						let (sum, carry) = self.registers[vx].overflowing_add(self.registers[vy]);
+						self.registers[vx] = sum;
+						self.registers[0xf] = carry as u8;
+					},
 					0x5 => { // set VX to VX - VY
-						self.registers[0xf] = (self.registers[vx] > self.registers[vy]) as u8;
+						let carry: bool = self.registers[vx] >= self.registers[vy];
 						self.registers[vx] -= self.registers[vy];
+						self.registers[0xf] = carry as u8;
 					},
 					0x6 => { // shift
-						if SUPER_CHIP {
-							self.registers[0xf] = self.registers[vx] & 0b00000001;
-							self.registers[vx] = self.registers[vx] >> 1;
-						} else {
-							self.registers[0xf] = self.registers[vy] & 0b00000001;
-							self.registers[vx] = self.registers[vy] >> 1;
-						}
+						let reg: usize = if SUPER_CHIP { vx } else { vy };
+						let carry: u8 = self.registers[reg] & 0x1;
+						self.registers[vx] = self.registers[reg] >> 1;
+						self.registers[0xf] = carry;
 					},
 					0x7 => { // set VX to VY - VX
-						self.registers[0xf] = (self.registers[vy] > self.registers[vx]) as u8;
+						let carry: bool = self.registers[vy] >= self.registers[vx];
 						self.registers[vx]  = self.registers[vy] - self.registers[vx];
+						self.registers[0xf] = carry as u8;
 					},
 					0xe => { // shift
-						if SUPER_CHIP {
-							self.registers[0xf] = self.registers[vx] & 0b10000000;
-							self.registers[vx] = self.registers[vx] << 1;
-						} else {
-							self.registers[0xf] = self.registers[vy] & 0b10000000;
-							self.registers[vx] = self.registers[vy] << 1;
-						}
+						let reg: usize = if SUPER_CHIP { vx } else { vy };
+						let carry: u8 = (self.registers[reg] >> 7) & 0x1;
+						self.registers[vx] = self.registers[reg] << 1;
+						self.registers[0xf] = carry;
 					},
 					_ => Self::unhandled_instruction(&instruction),
 				}

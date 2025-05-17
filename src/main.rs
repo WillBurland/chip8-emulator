@@ -32,7 +32,7 @@ const FONT_DATA: [u8; 5 * 16] = [
 	0xf0, 0x80, 0xf0, 0x80, 0x80  // F
 ];
 
-const PROGRAM_NAME: &str = "test-opcode";
+const PROGRAM_NAME: &str = "tests/flags";
 
 fn main() {
 	let mut chip8: chip8::Chip8 = chip8::Chip8::new();
