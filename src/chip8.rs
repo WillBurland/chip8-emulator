@@ -68,6 +68,10 @@ impl Chip8 {
 		&self.display
 	}
 
+	pub fn set_keypad(&mut self, key: usize, value: bool) {
+		self.keypad[key] = value;
+	}
+
 	pub fn fetch_decode_execute(&mut self) {
 		// fetch
 		let block: [u8; 2] = {
@@ -85,8 +89,6 @@ impl Chip8 {
 		let n:   u8    =  (instruction & 0x000f) as u8; // 4 bit number
 		let nn:  u8    =  (instruction & 0x00ff) as u8; // 8 bit number
 		let nnn: u16   =   instruction & 0x0fff; // memory address
-
-		//println!("Running: 0x{:04x}, c: {:x}", instruction, c);
 
 		// execute
 		match c {
@@ -188,15 +190,31 @@ impl Chip8 {
 			},
 			0xe => {
 				match nn {
-					0x9e => {}, // TODO: skip (pc+=2) if reg[vx] == input key
-					0xa1 => {}, // TODO: skip (pc+=2) if reg[vx] != input key
+					0x9e => { // skip if key[reg[vx]] held
+						if self.keypad[self.registers[vx] as usize] {
+							self.pc += 2;
+						}
+					},
+					0xa1 => { // skip if key[reg[vx]] not held
+						if !self.keypad[self.registers[vx] as usize] {
+							self.pc += 2;
+						}
+					},
 					_ => Self::unhandled_instruction(&instruction),
 				}
 			},
 			0xf => {
 				match nn {
 					0x07 => self.registers[vx] = self.delay_timer, // set VX to delay timer
-					0x0a => {}, // TODO: get key
+					0x0a => { // block until key pressed
+						for i in 0..16 {
+							if self.keypad[i] {
+								self.registers[vx] = i as u8;
+								return;
+							}
+						}
+						self.pc -= 2;
+					},
 					0x15 => self.delay_timer = self.registers[vx], // set delay timer to VX
 					0x18 => self.sound_timer = self.registers[vx], // set sound timer to VX
 					0x1e => { // add VX to I reg

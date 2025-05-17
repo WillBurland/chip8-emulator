@@ -32,7 +32,26 @@ const FONT_DATA: [u8; 5 * 16] = [
 	0xf0, 0x80, 0xf0, 0x80, 0x80  // F
 ];
 
-const PROGRAM_NAME: &str = "tests/flags";
+const KEY_MAP: &[(Key, u8)] = &[
+	(Key::X,    0x0),
+	(Key::Key1, 0x1),
+	(Key::Key2, 0x2),
+	(Key::Key3, 0x3),
+	(Key::Q,    0x4),
+	(Key::W,    0x5),
+	(Key::E,    0x6),
+	(Key::A,    0x7),
+	(Key::S,    0x8),
+	(Key::D,    0x9),
+	(Key::Z,    0xa),
+	(Key::C,    0xb),
+	(Key::Key4, 0xc),
+	(Key::R,    0xd),
+	(Key::F,    0xe),
+	(Key::V,    0xf),
+];
+
+const PROGRAM_NAME: &str = "tests/input";
 
 fn main() {
 	let mut chip8: chip8::Chip8 = chip8::Chip8::new();
@@ -80,6 +99,9 @@ fn main() {
 		}
 
 		// emulate
+		for (key, value) in KEY_MAP {
+			chip8.set_keypad(*value as usize, window.is_key_released(*key));
+		}
 		chip8.decrement_timers();
 		chip8.fetch_decode_execute();
 
